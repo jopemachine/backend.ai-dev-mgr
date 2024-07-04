@@ -28,7 +28,9 @@ rm -rf ~/.local/backend.ai/repo
 After deleting the cache, the script will clone a fresh copy of the repository on the next run.
 
 ## Usage examples:
-TIP: If you want to omit the `-b main` in all the examples below, you can create a text file called `BRANCH` in your executable directory and write main in it, and it will be referenced automatically. In this case, if you gave the `-b` option, it will still take precedence.
+
+> [!NOTE]
+> If you want to omit the `-b main` in all the examples below, you can create a text file called `BRANCH` in your executable directory and write main in it, and it will be referenced automatically. In this case, if you gave the `-b` option, it will still take precedence.
 
 `bndev.sh check`
 Check if the system is ready for Backend.AI installation
