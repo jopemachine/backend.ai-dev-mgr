@@ -503,15 +503,15 @@ case "$COMMAND" in
     case "$SUBCOMMAND" in
       up)
         show_info "Starting halfstack..."
-        docker compose -p bai-${SANITIZED_BRANCH} -f docker-compose.halfstack.current.yml up -d
+        docker compose -p ${SANITIZED_BRANCH} -f docker-compose.halfstack.current.yml up -d
         ;;
       stop)
         show_info "Stopping halfstack..."
-        docker compose -p bai-${SANITIZED_BRANCH} -f docker-compose.halfstack.current.yml stop
+        docker compose -p ${SANITIZED_BRANCH} -f docker-compose.halfstack.current.yml stop
         ;;
       down)
         show_info "Removing halfstack..."
-        docker compose -p bai-${SANITIZED_BRANCH} -f docker-compose.halfstack.current.yml down
+        docker compose -p ${SANITIZED_BRANCH} -f docker-compose.halfstack.current.yml down
         ;;
       status)
         hs_status
