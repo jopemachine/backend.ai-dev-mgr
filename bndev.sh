@@ -165,7 +165,7 @@ usage() {
   echo -e "${BLUE}Commands:${NC}"
   echo -e "${GREEN}  clone${NC}       Clone the repository and switch to the specified branch"
   echo -e "${GREEN}  install${NC}     Install Backend.AI service for the specified branch"
-  echo -e "${GREEN}  run${NC}         Run a Backend.AI component. Available components: agent, manager, webserver, storage-proxy, all"
+  echo -e "${GREEN}  run${NC}         Run a Backend.AI component. Available components: agent, manager, webserver, storage-proxy, app-proxy, all"
   echo -e "${GREEN}  hs${NC}          Manage the halfstack environment. Available commands: up, stop, down"
   echo -e "${GREEN}  pants${NC}       Manage pants environment. Available commands: reset"
   echo -e "${GREEN}  check${NC}       Check if the system is ready for Backend.AI installation"
@@ -189,12 +189,13 @@ hs_usage() {
 # Display run usage
 run_usage() {
   usage_header
-  show_with_color "Usage: $0 run {agent|manager|webserver|storage-proxy|all} [-b branch_name]\n" YELLOW
+  show_with_color "Usage: $0 run {agent|manager|webserver|storage-proxy|all|stop-all} [-b branch_name]\n" YELLOW
   echo -e "${BLUE}Commands for run:${NC}"
   echo -e "${GREEN}  agent${NC}          Run the agent component"
   echo -e "${GREEN}  manager${NC}        Run the manager component"
   echo -e "${GREEN}  webserver${NC}      Run the webserver component"
   echo -e "${GREEN}  storage-proxy${NC}  Run the storage proxy component"
+  echo -e "${GREEN}  app-proxy${NC}      Run the app proxy component"
   echo -e "${GREEN}  all${NC}            Run all components"
   usage_footer
   exit 1
@@ -225,16 +226,17 @@ pants_usage() {
 # performance. If the repository already exists, it pulls the latest changes.
 # -----------------------------------------------------------------------------
 clone_or_update_repo() {
-  LOCAL_REPO="$HOME/.local/backend.ai/repo"
+  LOCAL_REPO="$HOME/.local/backend.ai/repos/${SANITIZED_BRANCH}"
   if [ -d "$LOCAL_REPO" ]; then
-    show_info "Updating existing repository..."
+    show_info "Updating existing repository for branch ${BRANCH}..."
     pushd "$LOCAL_REPO" > /dev/null
+    git checkout "$BRANCH" || ( show_error "Branch '$BRANCH' does not exist." && exit 1 )
     git pull
     popd > /dev/null
   else
-    show_info "Cloning repository..."
-    mkdir -p "$HOME/.local/backend.ai"
-    git clone git@github.com:lablup/backend.ai.git "$LOCAL_REPO"
+    show_info "Cloning repository for branch ${BRANCH}..."
+    mkdir -p "$HOME/.local/backend.ai/repos"
+    git clone --branch "$BRANCH" git@github.com:lablup/backend.ai.git "$LOCAL_REPO"
   fi
 }
 
@@ -379,6 +381,7 @@ get_branch() {
       usage
     fi
   fi
+  LOCAL_REPO="$HOME/.local/backend.ai/repos/${SANITIZED_BRANCH}"
 }
 
 # Reset pants environment
@@ -397,33 +400,53 @@ reset_pants() {
 # the window into panes for each component.
 # -----------------------------------------------------------------------------
 run_all_components() {
-  TMUX_SESSION_NAME="backend_ai_${SANITIZED_BRANCH}"
+  COLUMNS=$(tput cols)
+  LINES=$(tput lines)
 
-  # Check if the tmux session already exists
-  if tmux has-session -t ${TMUX_SESSION_NAME} 2>/dev/null; then
-    show_error "Tmux session ${TMUX_SESSION_NAME} already exists. Please close the existing session or use a different branch."
-    exit 1
+  RATIO=$(echo "scale=2; $COLUMNS / $LINES" | bc)
+
+  # tmux new-session -d -s ${TMUX_SESSION_NAME}
+
+  if (( $(echo "$RATIO > 1.5" | bc -l) )); then
+      tmux split-window -h
+      tmux split-window -h
+      tmux select-layout even-horizontal
+      tmux select-pane -t 0
+      tmux split-window -v
+      tmux select-pane -t 2
+      tmux split-window -v
+      tmux select-pane -t 4
+      tmux split-window -v
+  else
+      tmux split-window -v
+      tmux split-window -v
+      tmux select-layout even-vertical
+      tmux select-pane -t 0
+      tmux split-window -h
+      tmux select-pane -t 2
+      tmux split-window -h
+      tmux select-pane -t 4
+      tmux split-window -h
   fi
+  tmux select-layout tiled 
 
-  tmux new-session -d -s ${TMUX_SESSION_NAME}
-  tmux split-window -h
-  tmux split-window -v
   tmux select-pane -t 0
-  tmux split-window -v
-  
-  tmux select-pane -t 0
-  tmux send-keys "cd bai-${SANITIZED_BRANCH} && ./backend.ai ag start-server --debug" C-m
+  tmux send-keys "./backend.ai ag start-server --debug" C-m
   
   tmux select-pane -t 1
-  tmux send-keys "cd bai-${SANITIZED_BRANCH} && OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES ./backend.ai mgr start-server --debug" C-m
+  tmux send-keys "OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES ./backend.ai mgr start-server --debug" C-m
   
   tmux select-pane -t 2
-  tmux send-keys "cd bai-${SANITIZED_BRANCH} && export BACKEND_ENDPOINT_TYPE=api && ./py -m ai.backend.web.server --debug" C-m
+  tmux send-keys "export BACKEND_ENDPOINT_TYPE=api && ./py -m ai.backend.web.server --debug" C-m
   
   tmux select-pane -t 3
-  tmux send-keys "cd bai-${SANITIZED_BRANCH} && ./py -m ai.backend.storage.server" C-m
-  
-  tmux attach-session -t ${TMUX_SESSION_NAME}
+  tmux send-keys "./py -m ai.backend.storage.server" C-m
+
+  tmux select-pane -t 4
+  tmux send-keys "./backend.ai wsproxy start-server" C-m
+
+  tmux select-pane -t 5
+  # tmux attach-session -t ${TMUX_SESSION_NAME}
 }
 
 # Check for help commands
@@ -436,21 +459,23 @@ case "$COMMAND" in
   clone)
     get_branch
     clone_or_update_repo
-    copy_repo_to_branch
+    # copy_repo_to_branch
+    cd "$LOCAL_REPO"
     ;;
 
   install)
     get_branch
-    cd bai-${SANITIZED_BRANCH}
+    cd "$LOCAL_REPO"
     show_info "Installing dependencies..."
     bash ./scripts/install-dev.sh
-    show_info "Building pex..."
-    pants export --resolve=python-default --resolve=mypy --resolve=ruff --resolve=towncrier --resolve=pytest
+
+    #show_info "Building pex..."
+    #pants export --resolve=python-default --resolve=mypy --resolve=ruff --resolve=towncrier --resolve=pytest
     ;;
 
   run)
     get_branch
-    cd bai-${SANITIZED_BRANCH}
+    cd "$LOCAL_REPO"
     case "$SUBCOMMAND" in
       agent)
         export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
@@ -471,9 +496,19 @@ case "$COMMAND" in
         show_info "Running storage proxy..."
         ./py -m ai.backend.storage.server
         ;;
+      app-proxy)
+        show_info "Running app proxy..."
+        ./backend.ai wsproxy start-server
+        ;;
       all)
         run_all_components
         ;;
+      # stop-all)
+      #   TMUX_SESSION_NAME="backend_ai_${SANITIZED_BRANCH}"
+      #   for pane in $(tmux list-panes -s -t ${TMUX_SESSION_NAME} -F '#P'); do
+      #     tmux send-keys -t ${TMUX_SESSION_NAME}:.$pane C-z "kill -TERM %1" C-m
+      #   done
+      #   ;;
       *)
         run_usage
         ;;
@@ -485,7 +520,7 @@ case "$COMMAND" in
       hs_usage
     fi
     get_branch
-    cd bai-${SANITIZED_BRANCH}
+    cd "$LOCAL_REPO"
     case "$SUBCOMMAND" in
       up)
         show_info "Starting halfstack..."
@@ -514,6 +549,7 @@ case "$COMMAND" in
       pants_usage
     fi
     get_branch
+    cd "$LOCAL_REPO"
     case "$SUBCOMMAND" in
       reset)
         reset_pants
