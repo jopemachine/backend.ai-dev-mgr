@@ -400,53 +400,32 @@ reset_pants() {
 # the window into panes for each component.
 # -----------------------------------------------------------------------------
 run_all_components() {
-  COLUMNS=$(tput cols)
-  LINES=$(tput lines)
+  # Manager
+  tmux new-window
+  tmux rename-window manager
 
-  RATIO=$(echo "scale=2; $COLUMNS / $LINES" | bc)
+  # Agent
+  tmux new-window
+  tmux rename-window agent
 
-  # tmux new-session -d -s ${TMUX_SESSION_NAME}
+  # Storage
+  tmux new-window
+  tmux rename-window storage
 
-  if (( $(echo "$RATIO > 1.5" | bc -l) )); then
-      tmux split-window -h
-      tmux split-window -h
-      tmux select-layout even-horizontal
-      tmux select-pane -t 0
-      tmux split-window -v
-      tmux select-pane -t 2
-      tmux split-window -v
-      tmux select-pane -t 4
-      tmux split-window -v
-  else
-      tmux split-window -v
-      tmux split-window -v
-      tmux select-layout even-vertical
-      tmux select-pane -t 0
-      tmux split-window -h
-      tmux select-pane -t 2
-      tmux split-window -h
-      tmux select-pane -t 4
-      tmux split-window -h
-  fi
-  tmux select-layout tiled 
+  # Web UI
+  tmux new-window
+  tmux rename-window webui
 
-  tmux select-pane -t 0
-  tmux send-keys "./backend.ai ag start-server --debug" C-m
-  
-  tmux select-pane -t 1
-  tmux send-keys "OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES ./backend.ai mgr start-server --debug" C-m
-  
-  tmux select-pane -t 2
-  tmux send-keys "export BACKEND_ENDPOINT_TYPE=api && ./py -m ai.backend.web.server --debug" C-m
-  
-  tmux select-pane -t 3
-  tmux send-keys "./py -m ai.backend.storage.server" C-m
+  # WSProxy
+  tmux new-window
+  tmux rename-window wsproxy
 
-  tmux select-pane -t 4
-  tmux send-keys "./backend.ai wsproxy start-server" C-m
-
-  tmux select-pane -t 5
-  # tmux attach-session -t ${TMUX_SESSION_NAME}
+  sleep 2
+  tmux send-keys -t manager 'OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES ./backend.ai mgr start-server --debug' Enter
+  tmux send-keys -t agent './backend.ai ag start-server --debug' Enter
+  tmux send-keys -t storage './py -m ai.backend.storage.server' Enter
+  tmux send-keys -t web 'export BACKEND_ENDPOINT_TYPE=api && ./py -m ai.backend.web.server --debug' Enter
+  tmux send-keys -t wsproxy './backend.ai wsproxy start-server' Enter
 }
 
 # Check for help commands
