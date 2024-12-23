@@ -154,6 +154,7 @@ usage_header() {
 usage_footer() {
   echo -e "${BLUE}Options:${NC}"
   echo -e "${GREEN}  -b branch_name${NC}   Specify the branch name to use"
+  echo -e "${GREEN}  -g graphite${NC}      Use graphite when cloning repository"
   echo -e "${GREEN}  help, -help, --help${NC}   Show this help message"
   show_note "If -b option is not provided, the branch name will be read from the BRANCH file if it exists."
 }
@@ -236,7 +237,12 @@ clone_or_update_repo() {
   else
     show_info "Cloning repository for branch ${BRANCH}..."
     mkdir -p "$HOME/.local/backend.ai/repos"
-    git clone --branch "$BRANCH" git@github.com:lablup/backend.ai.git "$LOCAL_REPO"
+    git clone git@github.com:lablup/backend.ai.git "$LOCAL_REPO"
+
+    if [[ "$USE_GRAPHITE" == true ]]; then
+      cd "$LOCAL_REPO"
+      gt get "${BRANCH}"
+    fi
   fi
 }
 
@@ -337,6 +343,7 @@ check_system_readiness() {
 
 # Parse arguments
 BRANCH=""
+USE_GRAPHITE=false
 COMMAND=""
 SUBCOMMAND=""
 COMPONENT=""
@@ -346,6 +353,10 @@ while [[ $# -gt 0 ]]; do
       BRANCH=$2
       SANITIZED_BRANCH=${BRANCH//\//_}
       shift
+      shift
+      ;;
+    -g|--graphite)
+      USE_GRAPHITE=true
       shift
       ;;
     clone|install|run|hs|pants|check|help)
