@@ -33,12 +33,6 @@
 # 4. hs: Manage the halfstack environment. Available commands: up, stop, down,
 #    status.
 # 5. pants: Manage the pants environment. Available commands: reset.
-# 6. check: Verify if the system is ready for Backend.AI installation.
-# 7. help: Display usage and command information.
-#
-# The script supports the following options and arguments:
-# -b branch_name: Specify the branch name to use. If this option is not provided,
-#    the branch name will be read from the BRANCH file in the current directory.
 #
 # Repository Caching:
 # This script clones the Backend.AI repository into ~/.local/backend.ai/repo
@@ -55,8 +49,6 @@
 # on the next run.
 #
 # Usage examples:
-# bndev.sh check
-# Check if the system is ready for Backend.AI installation
 #
 # bndev.sh clone -b main
 # Clone the repository and switch to the 'main' branch
@@ -147,29 +139,29 @@ show_with_color() {
 }
 
 usage_header() {
-  echo -e "\n${BLUE}Backend.AI Developer Environment Manangement Tool${NC}\n"
+  echo -e "\n${BLUE}Backend.AI Developer Environment Management Tool${NC}\n"
   echo -e "${WHITE}This tool helps you manage the Backend.AI development environment.${NC}\n"
 }
 
 usage_footer() {
   echo -e "${BLUE}Options:${NC}"
   echo -e "${GREEN}  -b branch_name${NC}   Specify the branch name to use"
+  echo -e "${GREEN}  -p pr_number${NC}     Specify the PR number to use"
   echo -e "${GREEN}  -g graphite${NC}      Use graphite when cloning repository"
   echo -e "${GREEN}  help, -help, --help${NC}   Show this help message"
-  show_note "If -b option is not provided, the branch name will be read from the BRANCH file if it exists."
 }
 
 # Display usage
 usage() {
   usage_header
-  show_with_color "Usage: $0 {clone|install|run|hs|pants|help} [-b branch_name] [component]${NC}\n" YELLOW
+  show_with_color "Usage: $0 <argument> [-b branch_name] [component]${NC}\n" YELLOW
   echo -e "${BLUE}Commands:${NC}"
-  echo -e "${GREEN}  clone${NC}       Clone the repository and switch to the specified branch"
-  echo -e "${GREEN}  install${NC}     Install Backend.AI service for the specified branch"
-  echo -e "${GREEN}  run${NC}         Run a Backend.AI component. Available components: agent, manager, webserver, storage-proxy, app-proxy, all"
-  echo -e "${GREEN}  hs${NC}          Manage the halfstack environment. Available commands: up, stop, down"
-  echo -e "${GREEN}  pants${NC}       Manage pants environment. Available commands: reset"
-  echo -e "${GREEN}  check${NC}       Check if the system is ready for Backend.AI installation"
+  echo -e "${GREEN}  clone${NC}               Clone the repository and switch to the specified branch"
+  echo -e "${GREEN}  clone_and_install${NC}   Clone and Install Backend.AI service for the specified branch"
+  echo -e "${GREEN}  install${NC}             Install Backend.AI service for the specified branch"
+  echo -e "${GREEN}  run${NC}                 Run a Backend.AI component. Available components: agent, manager, webserver, storage-proxy, app-proxy, all"
+  echo -e "${GREEN}  hs${NC}                  Manage the halfstack environment. Available commands: up, stop, down"
+  echo -e "${GREEN}  pants${NC}               Manage pants environment. Available commands: reset"
   usage_footer
   exit 1
 }
@@ -190,7 +182,7 @@ hs_usage() {
 # Display run usage
 run_usage() {
   usage_header
-  show_with_color "Usage: $0 run {agent|manager|webserver|storage-proxy|all|stop-all} [-b branch_name]\n" YELLOW
+  show_with_color "Usage: $0 run {agent|manager|webserver|storage-proxy|app-proxy|all} [-b branch_name]\n" YELLOW
   echo -e "${BLUE}Commands for run:${NC}"
   echo -e "${GREEN}  agent${NC}          Run the agent component"
   echo -e "${GREEN}  manager${NC}        Run the manager component"
@@ -219,13 +211,6 @@ pants_usage() {
   exit 1
 }
 
-# -----------------------------------------------------------------------------
-# Function to clone or update the repository
-# -----------------------------------------------------------------------------
-# This function clones the Backend.AI repository into ~/.local/backend.ai/repo
-# and reuses this local copy as a cache to reduce network traffic and improve
-# performance. If the repository already exists, it pulls the latest changes.
-# -----------------------------------------------------------------------------
 clone_or_update_repo() {
   LOCAL_REPO="$HOME/.local/backend.ai/repos/${SANITIZED_BRANCH}"
   if [ -d "$LOCAL_REPO" ]; then
@@ -246,112 +231,33 @@ clone_or_update_repo() {
   fi
 }
 
-# -----------------------------------------------------------------------------
-# Function to copy the repository to the current branch directory
-# -----------------------------------------------------------------------------
-# This function copies the cached repository to the specified branch directory
-# and checks out the specified branch. If the target directory already exists,
-# it removes it before copying.
-# -----------------------------------------------------------------------------
-copy_repo_to_branch() {
-  LOCAL_REPO="$HOME/.local/backend.ai/repo"
-  TARGET_DIR="bai-${SANITIZED_BRANCH}"
-  if [ -d "$TARGET_DIR" ]; then
-    show_info "Removing existing directory: $TARGET_DIR"
-    rm -rf "$TARGET_DIR"
-  fi
-  show_info "Copying repository to $TARGET_DIR"
-  cp -Rp "$LOCAL_REPO" "$TARGET_DIR"
-  cd "$TARGET_DIR"
-  if ! git checkout "$BRANCH"; then
-    show_error "Branch '$BRANCH' does not exist."
-    exit 1
-  fi
-}
-
-# Check if Docker is installed
-check_docker() {
-  if command -v docker &> /dev/null; then
-    echo -e "${GREEN}Docker${NC} ...ok"
-  else
-    echo -e "${RED}Docker${NC} ...${LRED}not found${NC}"
-    show_error "Docker is not installed. Please install Docker and try again."
-    exit 1
-  fi
-}
-
-# Check if Homebrew is installed (macOS)
-check_homebrew() {
-  if command -v brew &> /dev/null; then
-    echo -e "${GREEN}Homebrew${NC} ...ok"
-  else
-    echo -e "${RED}Homebrew${NC} ...${LRED}not found${NC}"
-    show_error "Homebrew is not installed. Please install Homebrew and try again."
-    exit 1
-  fi
-}
-
-# Check if a Homebrew package is installed (macOS)
-check_homebrew_packages() {
-  REQUIRED_PACKAGES=("jq")
-  INSTALLED_PACKAGES=$(brew ls --versions | awk '{print $1}')
-
-  for pkg in "${REQUIRED_PACKAGES[@]}"; do
-    if echo "$INSTALLED_PACKAGES" | grep -q "^${pkg}$"; then
-      echo -e "${GREEN} * ${pkg}${NC} ...ok"
-    else
-      echo -e "${RED}${pkg}${NC} ...${LRED}not found${NC}"
-      show_error "${pkg} is not installed via Homebrew. Please install ${pkg} using Homebrew and try again."
-      exit 1
-    fi
-  done
-}
-
-# Check if required packages are installed (Ubuntu)
-check_ubuntu_packages() {
-  REQUIRED_PACKAGES=(git jq gcc make g++)
-  for pkg in "${REQUIRED_PACKAGES[@]}"; do
-    if dpkg -l | grep -q "^ii\s*${pkg}"; then
-      echo -e "${GREEN} * ${pkg}${NC} ...ok"
-    else
-      echo -e "${RED}${pkg}${NC} ...${LRED}not found${NC}"
-      show_error "${pkg} is not installed. Please install ${pkg} and try again."
-      exit 1
-    fi
-  done
-}
-
-# Check system readiness for Backend.AI installation
-check_system_readiness() {
-  show_info "Checking system readiness for Backend.AI installation..."
-  check_docker
-
-  if [[ "$OSTYPE" == "darwin"* ]]; then
-    check_homebrew
-    check_homebrew_packages
-  elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    if [ -f /etc/os-release ]; then
-      . /etc/os-release
-      if [ "$ID" == "ubuntu" ]; then
-        check_ubuntu_packages
-      fi
-    fi
-  fi
-
-  show_info "System is ready for Backend.AI installation."
-}
-
 # Parse arguments
 BRANCH=""
+PR_NUMBER=""
 USE_GRAPHITE=false
 COMMAND=""
 SUBCOMMAND=""
 COMPONENT=""
+
 while [[ $# -gt 0 ]]; do
   case $1 in
     -b)
+      if [ -n "$PR_NUMBER" ]; then
+        show_error "You cannot specify both branch(-b) and PR(-p) at the same time."
+        exit 1
+      fi
       BRANCH=$2
       SANITIZED_BRANCH=${BRANCH//\//_}
+      shift
+      shift
+      ;;
+    -p|--pr)
+      if [ -n "$BRANCH" ]; then
+        show_error "You cannot specify both branch(-b) and PR(-p) at the same time."
+        exit 1
+      fi
+      PR_NUMBER=$2
+      SANITIZED_BRANCH="pr_${PR_NUMBER}"
       shift
       shift
       ;;
@@ -359,7 +265,7 @@ while [[ $# -gt 0 ]]; do
       USE_GRAPHITE=true
       shift
       ;;
-    clone|install|run|hs|pants|check|help)
+    clone|clone_and_install|install|run|hs|pants|help)
       COMMAND=$1
       if [[ $# -gt 1 && ! $2 =~ ^- ]]; then
         SUBCOMMAND=$2
@@ -374,28 +280,55 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# -----------------------------------------------------------------------------
-# Get branch name
-# -----------------------------------------------------------------------------
-# This function retrieves the branch name. If the branch name is not provided
-# as an argument, it reads the branch name from the BRANCH file in the current
-# directory. If no branch name is found, it prints an error message and exits
-# the script.
-# -----------------------------------------------------------------------------
+get_branch_from_pr() {
+  local pr_number=$1
+  local api_url="https://api.github.com/repos/lablup/backend.ai/pulls/${pr_number}"
+
+  # Check if GITHUB_TOKEN is set for authenticated requests
+  if [ -z "$GITHUB_TOKEN" ]; then
+    show_warning "GITHUB_TOKEN is not set. Proceeding with unauthenticated requests (may be rate limited)."
+    RESPONSE=$(curl -s "$api_url")
+  else
+    RESPONSE=$(curl -s -H "Authorization: token $GITHUB_TOKEN" "$api_url")
+  fi
+
+  # Check if the PR exists
+  if echo "$RESPONSE" | grep -q '"message": "Not Found"'; then
+    show_error "PR #${pr_number} not found."
+    exit 1
+  fi
+
+  # Extract the head branch name using jq
+  BRANCH=$(echo "$RESPONSE" | jq -r '.head.ref')
+
+  if [ "$BRANCH" == "null" ] || [ -z "$BRANCH" ]; then
+    show_error "Failed to retrieve branch name for PR #${pr_number}."
+    exit 1
+  fi
+
+  SANITIZED_BRANCH=${BRANCH//\//_}
+}
+
 get_branch() {
-  if [ -z "$BRANCH" ]; then
+  if [ -n "$PR_NUMBER" ]; then
+    get_branch_from_pr "$PR_NUMBER"
+    if [ -z "$BRANCH" ]; then
+      show_error "Failed to retrieve branch name from PR #${PR_NUMBER}."
+      exit 1
+    fi
+  elif [ -z "$BRANCH" ]; then
     if [ -f "BRANCH" ]; then
       BRANCH=$(cat BRANCH)
       SANITIZED_BRANCH=${BRANCH//\//_}
     else
-      show_error "Branch name is required."
+      show_error "Branch name is required. Specify with -b or -p."
       usage
     fi
+  else
+    :
   fi
-  LOCAL_REPO="$HOME/.local/backend.ai/repos/${SANITIZED_BRANCH}"
 }
 
-# Reset pants environment
 reset_pants() {
   cd bai-${SANITIZED_BRANCH}
   killall pantsd
@@ -403,13 +336,6 @@ reset_pants() {
   show_info "Pants environment reset successfully."
 }
 
-# -----------------------------------------------------------------------------
-# Run all components in tmux
-# -----------------------------------------------------------------------------
-# This function runs all Backend.AI components (agent, manager, webserver, and
-# storage proxy) in a tmux session. It creates a new tmux session and splits
-# the window into panes for each component.
-# -----------------------------------------------------------------------------
 run_all_components() {
   # Manager
   tmux new-window
@@ -449,7 +375,6 @@ case "$COMMAND" in
   clone)
     get_branch
     clone_or_update_repo
-    # copy_repo_to_branch
     cd "$LOCAL_REPO"
     ;;
 
@@ -458,9 +383,17 @@ case "$COMMAND" in
     cd "$LOCAL_REPO"
     show_info "Installing dependencies..."
     bash ./scripts/install-dev.sh
+    show_info "Building pex..."
+    pants export --resolve=python-default --resolve=mypy --resolve=ruff --resolve=towncrier --resolve=pytest
+    ;;
 
-    #show_info "Building pex..."
-    #pants export --resolve=python-default --resolve=mypy --resolve=ruff --resolve=towncrier --resolve=pytest
+  clone_and_install)
+    get_branch
+    clone_or_update_repo
+    cd "$LOCAL_REPO"
+    bash ./scripts/install-dev.sh
+    show_info "Building pex..."
+    pants export --resolve=python-default --resolve=mypy --resolve=ruff --resolve=towncrier --resolve=pytest
     ;;
 
   run)
@@ -493,12 +426,6 @@ case "$COMMAND" in
       all)
         run_all_components
         ;;
-      # stop-all)
-      #   TMUX_SESSION_NAME="backend_ai_${SANITIZED_BRANCH}"
-      #   for pane in $(tmux list-panes -s -t ${TMUX_SESSION_NAME} -F '#P'); do
-      #     tmux send-keys -t ${TMUX_SESSION_NAME}:.$pane C-z "kill -TERM %1" C-m
-      #   done
-      #   ;;
       *)
         run_usage
         ;;
@@ -549,10 +476,6 @@ case "$COMMAND" in
         pants_usage
         ;;
     esac
-    ;;
-
-  check)
-    check_system_readiness
     ;;
 
   *)
