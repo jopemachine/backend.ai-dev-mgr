@@ -197,7 +197,7 @@ run_usage() {
 # Check the status of the halfstack environment
 hs_status() {
   show_info "Checking halfstack status..."
-  docker compose -p bai-${SANITIZED_BRANCH} -f docker-compose.halfstack.current.yml ps
+  docker compose -p ${SANITIZED_BRANCH} -f docker-compose.halfstack.current.yml ps
 }
 
 # Display pants usage
@@ -257,7 +257,6 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       PR_NUMBER=$2
-      SANITIZED_BRANCH="pr_${PR_NUMBER}"
       shift
       shift
       ;;
@@ -307,6 +306,8 @@ get_branch_from_pr() {
   fi
 
   SANITIZED_BRANCH=${BRANCH//\//_}
+  LOCAL_REPO="$HOME/.local/backend.ai/repos/${SANITIZED_BRANCH}"
+  show_info "Resolved branch name: ${SANITIZED_BRANCH}"
 }
 
 get_branch() {
@@ -320,17 +321,20 @@ get_branch() {
     if [ -f "BRANCH" ]; then
       BRANCH=$(cat BRANCH)
       SANITIZED_BRANCH=${BRANCH//\//_}
+      LOCAL_REPO="$HOME/.local/backend.ai/repos/${SANITIZED_BRANCH}"
     else
       show_error "Branch name is required. Specify with -b or -p."
       usage
     fi
   else
-    :
+    SANITIZED_BRANCH=${BRANCH//\//_}
+    LOCAL_REPO="$HOME/.local/backend.ai/repos/${SANITIZED_BRANCH}"
   fi
 }
 
 reset_pants() {
-  cd bai-${SANITIZED_BRANCH}
+  LOCAL_REPO="$HOME/.local/backend.ai/repos/${SANITIZED_BRANCH}"
+  cd "$LOCAL_REPO"
   killall pantsd
   rm -rf .tmp .pants.d .pants.env pants-local ~/.cache/pants
   show_info "Pants environment reset successfully."
@@ -391,6 +395,7 @@ case "$COMMAND" in
     get_branch
     clone_or_update_repo
     cd "$LOCAL_REPO"
+    show_info "Installing dependencies..."
     bash ./scripts/install-dev.sh
     show_info "Building pex..."
     pants export --resolve=python-default --resolve=mypy --resolve=ruff --resolve=towncrier --resolve=pytest
@@ -398,6 +403,7 @@ case "$COMMAND" in
 
   run)
     get_branch
+    show_info "Local repo path: ${LOCAL_REPO}"
     cd "$LOCAL_REPO"
     case "$SUBCOMMAND" in
       agent)
@@ -425,6 +431,9 @@ case "$COMMAND" in
         ;;
       all)
         run_all_components
+        ;;
+      webui)
+        # TODO: Implement this.
         ;;
       *)
         run_usage
