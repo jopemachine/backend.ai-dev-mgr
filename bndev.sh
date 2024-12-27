@@ -227,6 +227,8 @@ clone_or_update_repo() {
     if [[ "$USE_GRAPHITE" == true ]]; then
       cd "$LOCAL_REPO"
       gt get "${BRANCH}"
+    else
+      git checkout "$BRANCH" || ( show_error "Branch '$BRANCH' does not exist." && exit 1 )
     fi
   fi
 }
@@ -491,3 +493,4 @@ case "$COMMAND" in
     usage
     ;;
 esac
+
