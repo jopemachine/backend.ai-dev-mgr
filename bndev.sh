@@ -214,6 +214,7 @@ pants_usage() {
 clone_or_update_repo() {
   LOCAL_REPO="$HOME/.local/backend.ai/repos/${SANITIZED_BRANCH}"
   if [ -d "$LOCAL_REPO" ]; then
+    cd "$LOCAL_REPO"
     show_info "Updating existing repository for branch ${BRANCH}..."
     pushd "$LOCAL_REPO" > /dev/null
     git checkout "$BRANCH" || ( show_error "Branch '$BRANCH' does not exist." && exit 1 )
@@ -228,6 +229,7 @@ clone_or_update_repo() {
       cd "$LOCAL_REPO"
       gt get "${BRANCH}"
     else
+      cd "$LOCAL_REPO"
       git checkout "$BRANCH" || ( show_error "Branch '$BRANCH' does not exist." && exit 1 )
     fi
   fi
@@ -493,4 +495,3 @@ case "$COMMAND" in
     usage
     ;;
 esac
-
