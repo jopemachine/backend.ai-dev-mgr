@@ -230,6 +230,7 @@ clone_or_update_repo() {
       gt get "${BRANCH}"
     else
       cd "$LOCAL_REPO"
+      echo "Branch: ${BRANCH}"
       git checkout "$BRANCH" || ( show_error "Branch '$BRANCH' does not exist." && exit 1 )
     fi
   fi
@@ -344,7 +345,23 @@ reset_pants() {
   show_info "Pants environment reset successfully."
 }
 
+restart_docker_compose_stack_if_needed() {
+  local running_compose
+  running_compose=$(docker compose ls --format json \
+    | jq -r '.[] | select(.Status | startswith("running")) | .Name')
+  echo "Current compose stack: ${running_compose}"
+
+  if [ -n "$running_compose" ] && [ "$running_compose" != "$SANITIZED_BRANCH" ]; then
+    show_info "Stopping current docker compose stack: $running_compose"
+    docker compose -p "$running_compose" down
+    docker compose -p "${SANITIZED_BRANCH}" -f docker-compose.halfstack.current.yml up -d
+    sleep 2
+  fi
+}
+
 run_all_components() {
+  restart_docker_compose_stack_if_needed
+
   # Manager
   tmux new-window
   tmux rename-window manager
