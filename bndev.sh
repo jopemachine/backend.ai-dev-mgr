@@ -147,8 +147,10 @@ usage_footer() {
   echo -e "${BLUE}Options:${NC}"
   echo -e "${GREEN}  -b branch_name${NC}   Specify the branch name to use"
   echo -e "${GREEN}  -p pr_number${NC}     Specify the PR number to use"
+  echo -e "${GREEN}  -n new${NC}           Create a new branch without checking out"
   echo -e "${GREEN}  -g graphite${NC}      Use graphite when cloning repository"
   echo -e "${GREEN}  help, -help, --help${NC}   Show this help message"
+  show_note "If neither -b nor -p option is provided, the branch name will be read from the BRANCH file if it exists."
 }
 
 # Display usage
@@ -203,35 +205,60 @@ hs_status() {
 # Display pants usage
 pants_usage() {
   usage_header
-  show_with_color "Usage: $0 pants {reset} [-b branch_name]\n" YELLOW
+  show_with_color "Usage: $0 pants {reset} [options]\n" YELLOW
   echo -e "${BLUE}Commands for pants:${NC}"
   echo -e "${GREEN}  reset${NC}       Reset the pants environment"
   echo -e "${BLUE}Options:${NC}"
   echo -e "${GREEN}  -b branch_name${NC}   Specify the branch name to use"
+  echo -e "${GREEN}  -p pr_number${NC}     Specify the PR number to use"
+  echo -e "${GREEN}  -n new${NC}        Create a new branch without checking out"
   exit 1
 }
 
 clone_or_update_repo() {
-  LOCAL_REPO="$HOME/.local/backend.ai/repos/${SANITIZED_BRANCH}"
-  if [ -d "$LOCAL_REPO" ]; then
-    cd "$LOCAL_REPO"
-    show_info "Updating existing repository for branch ${BRANCH}..."
-    pushd "$LOCAL_REPO" > /dev/null
-    git checkout "$BRANCH" || ( show_error "Branch '$BRANCH' does not exist." && exit 1 )
-    git pull
-    popd > /dev/null
-  else
-    show_info "Cloning repository for branch ${BRANCH}..."
-    mkdir -p "$HOME/.local/backend.ai/repos"
-    git clone git@github.com:lablup/backend.ai.git "$LOCAL_REPO"
+  if [ "$IS_NEW" = true ]; then
+    if [ -z "$BRANCH" ]; then
+      show_error "Branch name is required with --new option."
+      exit 1
+    fi
 
-    if [[ "$USE_GRAPHITE" == true ]]; then
-      cd "$LOCAL_REPO"
-      gt get "${BRANCH}"
+    LOCAL_REPO="$HOME/.local/backend.ai/repos/${SANITIZED_BRANCH}"
+    if [ -d "$LOCAL_REPO" ]; then
+      show_error "Repository for branch '${BRANCH}' already exists at '${LOCAL_REPO}'."
+      exit 1
     else
+      show_info "Cloning repository for new branch '${BRANCH}'..."
+      mkdir -p "$HOME/.local/backend.ai/repos"
+      git clone git@github.com:lablup/backend.ai.git "$LOCAL_REPO"
+
+      pushd "$LOCAL_REPO" > /dev/null
+      git branch "${BRANCH}"
+      popd > /dev/null
+
+      show_info "Repository cloned for new branch '${BRANCH}' without checking out."
+    fi
+  else
+    LOCAL_REPO="$HOME/.local/backend.ai/repos/${SANITIZED_BRANCH}"
+    if [ -d "$LOCAL_REPO" ]; then
       cd "$LOCAL_REPO"
-      echo "Branch: ${BRANCH}"
+      show_info "Updating existing repository for branch '${BRANCH}'..."
+      pushd "$LOCAL_REPO" > /dev/null
       git checkout "$BRANCH" || ( show_error "Branch '$BRANCH' does not exist." && exit 1 )
+      git pull
+      popd > /dev/null
+    else
+      show_info "Cloning repository for branch '${BRANCH}'..."
+      mkdir -p "$HOME/.local/backend.ai/repos"
+      git clone git@github.com:lablup/backend.ai.git "$LOCAL_REPO"
+
+      if [[ "$USE_GRAPHITE" == true ]]; then
+        cd "$LOCAL_REPO"
+        gt get "${BRANCH}"
+      else
+        cd "$LOCAL_REPO"
+        echo "Branch: ${BRANCH}"
+        git checkout "$BRANCH" || ( show_error "Branch '$BRANCH' does not exist." && exit 1 )
+      fi
     fi
   fi
 }
@@ -239,6 +266,7 @@ clone_or_update_repo() {
 # Parse arguments
 BRANCH=""
 PR_NUMBER=""
+IS_NEW=false
 USE_GRAPHITE=false
 COMMAND=""
 SUBCOMMAND=""
@@ -263,6 +291,10 @@ while [[ $# -gt 0 ]]; do
       fi
       PR_NUMBER=$2
       shift
+      shift
+      ;;
+    -n|--new)
+      IS_NEW=true
       shift
       ;;
     -g|--graphite)
@@ -398,6 +430,10 @@ fi
 # Execute commands
 case "$COMMAND" in
   clone)
+    if [ "$IS_NEW" = true ] && [ -n "$PR_NUMBER" ]; then
+      show_error "--new option cannot be used with PR number."
+      exit 1
+    fi
     get_branch
     clone_or_update_repo
     cd "$LOCAL_REPO"
@@ -413,6 +449,10 @@ case "$COMMAND" in
     ;;
 
   clone_and_install)
+    if [ "$IS_NEW" = true ] && [ -n "$PR_NUMBER" ]; then
+      show_error "--new option cannot be used with PR number."
+      exit 1
+    fi
     get_branch
     clone_or_update_repo
     cd "$LOCAL_REPO"
@@ -461,7 +501,7 @@ case "$COMMAND" in
         ;;
     esac
     ;;
-
+  
   hs)
     if [ -z "$SUBCOMMAND" ]; then
       hs_usage
@@ -471,15 +511,15 @@ case "$COMMAND" in
     case "$SUBCOMMAND" in
       up)
         show_info "Starting halfstack..."
-        docker compose -p ${SANITIZED_BRANCH} -f docker-compose.halfstack.current.yml up -d
+        docker compose -p "${SANITIZED_BRANCH}" -f docker-compose.halfstack.current.yml up -d
         ;;
       stop)
         show_info "Stopping halfstack..."
-        docker compose -p ${SANITIZED_BRANCH} -f docker-compose.halfstack.current.yml stop
+        docker compose -p "${SANITIZED_BRANCH}" -f docker-compose.halfstack.current.yml stop
         ;;
       down)
         show_info "Removing halfstack..."
-        docker compose -p ${SANITIZED_BRANCH} -f docker-compose.halfstack.current.yml down
+        docker compose -p "${SANITIZED_BRANCH}" -f docker-compose.halfstack.current.yml down
         ;;
       status)
         hs_status
@@ -490,7 +530,7 @@ case "$COMMAND" in
         ;;
     esac
     ;;
-
+  
   pants)
     if [ -z "$SUBCOMMAND" ]; then
       pants_usage
@@ -507,7 +547,7 @@ case "$COMMAND" in
         ;;
     esac
     ;;
-
+  
   *)
     usage
     ;;
